@@ -1,6 +1,4 @@
-# shaadi.com — University Matchmaker
-
-An independently maintained student-to-university matching and application-planning frontend, adapted from [ishaands12/match-maker-path](https://github.com/ishaands12/match-maker-path). The repository name is playful; this project is **not affiliated with any matrimonial platform**.
+# shaadi.com
 
 ## What it offers
 - University discovery and profile-based matching.

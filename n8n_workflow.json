@@ -1,0 +1,225 @@
+{
+  "name": "Student Profile to Counselor Email",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "student-profile-submitted",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook_trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the profile data from either direct payload or nested profileData\nconst profile = $json.body.profileData || $json.body;\n\n// Safely access nested properties with fallbacks\nconst studentData = {\n  personalInfo: {\n    name: profile?.name || '',\n    email: profile?.email || '',\n    phone: profile?.phone || '',\n    address: profile?.address || '',\n    linkedin: profile?.linkedin || ''\n  },\n  academics: {\n    age: profile?.age || 18,\n    educationLevel: profile?.education_level || profile?.educationLevel || '',\n    gradingSystem: profile?.grading_system || profile?.gradingSystem || '',\n    academicScore: profile?.academic_score || profile?.academicScore || 0,\n    standardizedTest: profile?.standardized_test || profile?.standardizedTest || 'none',\n    testScore: profile?.test_score || profile?.testScore || 0\n  },\n  preferences: {\n    targetCountries: profile?.target_countries || profile?.targetCountries || [],\n    studyLevel: profile?.study_level || profile?.studyLevel || '',\n    budgetMin: profile?.budget_min || profile?.budgetMin || 20000,\n    budgetMax: profile?.budget_max || profile?.budgetMax || 80000,\n    scholarshipInterest: profile?.scholarship_interest || profile?.scholarshipInterest || false,\n    subjects: profile?.subjects || [],\n    extracurriculars: profile?.extracurriculars || [],\n    careerGoals: profile?.career_goals || profile?.careerGoals || ''\n  },\n  experience: {\n    organization: profile?.organization || '',\n    designation: profile?.designation || '',\n    bio: profile?.bio || '',\n    skills: profile?.skills || []\n  }\n};\n\nreturn { studentData };"
+      },
+      "id": "parse_student_data",
+      "name": "Parse Student Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.studentData;\n\nconst prompt = `You are an expert student counselor with 20 years of experience. Based on this student profile, write a personalized, encouraging message (3-4 paragraphs). Address their academics, goals, and university search strategy with warmth and professionalism.\n\nSTUDENT: ${data.personalInfo.name}\nAGE: ${data.academics.age}\nACADEMIC SCORE: ${data.academics.academicScore} (${data.academics.gradingSystem})\nTEST: ${data.academics.standardizedTest} (${data.academics.testScore})\nGOALS: ${data.preferences.careerGoals || 'Not specified'}\nSUBJECTS: ${data.preferences.subjects.join(', ')}\nTARGET COUNTRIES: ${data.preferences.targetCountries.join(', ')}\nBUDGET: $${data.preferences.budgetMin}-$${data.preferences.budgetMax}\n\nWrite an encouraging, personalized counselor message.`;\n\nreturn { prompt };"
+      },
+      "id": "create_gemini_prompt",
+      "name": "Create Gemini Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash/generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY_HERE"
+            }
+          ]
+        },
+        "headers": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{parts:[{text:$json.prompt}]}]"
+            },
+            {
+              "name": "generationConfig",
+              "value": "={temperature:0.7,maxOutputTokens:800}"
+            }
+          ]
+        }
+      },
+      "id": "call_gemini",
+      "name": "Call Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.body;\n\nif (!response.candidates || response.candidates.length === 0) {\n  throw new Error('No response from Gemini API');\n}\n\nconst counselorMessage = response.candidates[0].content.parts[0].text;\n\nreturn { counselorMessage };"
+      },
+      "id": "parse_gemini_response",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.studentData;\n\n// Sample university database with attributes\nconst universities = [\n  { name: \"University of California, Berkeley\", country: \"USA\", city: \"Berkeley\", ranking: 5, tuition: 45000, acceptance_rate: 15, specialties: [\"STEM\", \"Engineering\", \"Computer Science\"] },\n  { name: \"Stanford University\", country: \"USA\", city: \"Stanford\", ranking: 3, tuition: 60000, acceptance_rate: 3, specialties: [\"STEM\", \"Technology\", \"Business\"] },\n  { name: \"MIT\", country: \"USA\", city: \"Cambridge\", ranking: 1, tuition: 62000, acceptance_rate: 4, specialties: [\"STEM\", \"Engineering\", \"Computer Science\"] },\n  { name: \"Harvard University\", country: \"USA\", city: \"Cambridge\", ranking: 2, tuition: 60000, acceptance_rate: 3, specialties: [\"Liberal Arts\", \"Business\", \"Law\"] },\n  { name: \"Yale University\", country: \"USA\", city: \"New Haven\", ranking: 4, tuition: 62000, acceptance_rate: 4, specialties: [\"Liberal Arts\", \"Drama\", \"Music\"] },\n  { name: \"University of Toronto\", country: \"Canada\", city: \"Toronto\", ranking: 20, tuition: 15000, acceptance_rate: 20, specialties: [\"STEM\", \"Medicine\", \"Business\"] },\n  { name: \"University of British Columbia\", country: \"Canada\", city: \"Vancouver\", ranking: 25, tuition: 16000, acceptance_rate: 23, specialties: [\"STEM\", \"Commerce\", \"Engineering\"] },\n  { name: \"McGill University\", country: \"Canada\", city: \"Montreal\", ranking: 26, tuition: 14000, acceptance_rate: 24, specialties: [\"Medicine\", \"Engineering\", \"Science\"] },\n  { name: \"University of Waterloo\", country: \"Canada\", city: \"Waterloo\", ranking: 30, tuition: 17000, acceptance_rate: 30, specialties: [\"Engineering\", \"Computer Science\", \"Mathematics\"] },\n  { name: \"University of Alberta\", country: \"Canada\", city: \"Edmonton\", ranking: 35, tuition: 12000, acceptance_rate: 32, specialties: [\"Engineering\", \"Science\", \"Medicine\"] },\n  { name: \"Oxford University\", country: \"UK\", city: \"Oxford\", ranking: 2, tuition: 35000, acceptance_rate: 2, specialties: [\"Liberal Arts\", \"Law\", \"History\"] },\n  { name: \"Cambridge University\", country: \"UK\", city: \"Cambridge\", ranking: 3, tuition: 35000, acceptance_rate: 2, specialties: [\"STEM\", \"Mathematics\", \"Physics\"] },\n  { name: \"Imperial College London\", country: \"UK\", city: \"London\", ranking: 8, tuition: 38000, acceptance_rate: 8, specialties: [\"STEM\", \"Engineering\", \"Medicine\"] },\n  { name: \"ETH Zurich\", country: \"Switzerland\", city: \"Zurich\", ranking: 10, tuition: 1200, acceptance_rate: 5, specialties: [\"STEM\", \"Engineering\", \"Mathematics\"] },\n  { name: \"National University of Singapore\", country: \"Singapore\", city: \"Singapore\", ranking: 11, tuition: 23000, acceptance_rate: 25, specialties: [\"STEM\", \"Engineering\", \"Business\"] }\n];\n\n// Scoring function\nconst scoreUniversity = (uni) => {\n  let score = 0;\n  \n  // Budget match (higher is better if within budget)\n  if (uni.tuition <= data.preferences.budgetMax && uni.tuition >= data.preferences.budgetMin) {\n    score += 30;\n  } else if (uni.tuition <= data.preferences.budgetMax) {\n    score += 20;\n  }\n  \n  // Country preference\n  if (data.preferences.targetCountries.includes(uni.country)) {\n    score += 25;\n  }\n  \n  // Subject match\n  const matchingSubjects = uni.specialties.filter(s => data.preferences.subjects.some(sub => sub.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(sub.toLowerCase())));\n  score += matchingSubjects.length * 15;\n  \n  // Academic level match\n  if (data.academics.academicScore >= 85 && uni.ranking <= 50) score += 20;\n  if (data.academics.academicScore >= 75 && uni.ranking <= 100) score += 15;\n  if (data.academics.academicScore >= 65) score += 10;\n  \n  return score;\n};\n\n// Score and categorize universities\nconst scoredUnis = universities.map(uni => ({\n  ...uni,\n  score: scoreUniversity(uni)\n})).sort((a, b) => b.score - a.score);\n\n// Split into safe, target, dream\nconst matchedUniversities = {\n  safe: scoredUnis.slice(0, 5).map(u => ({ name: u.name, country: u.country, city: u.city, score: u.score, acceptance_rate: u.acceptance_rate })),\n  target: scoredUnis.slice(5, 10).map(u => ({ name: u.name, country: u.country, city: u.city, score: u.score, acceptance_rate: u.acceptance_rate })),\n  dream: scoredUnis.slice(10, 15).map(u => ({ name: u.name, country: u.country, city: u.city, score: u.score, acceptance_rate: u.acceptance_rate }))\n};\n\nreturn { matchedUniversities };"
+      },
+      "id": "get_matched_unis",
+      "name": "Get Matched Universities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.studentData;\nconst message = $json.counselorMessage;\nconst matches = $json.matchedUniversities;\n\nconst formatUni = (u) => `\n  <li style=\"padding: 15px; margin: 10px 0; background: white; border-left: 4px solid #667eea; border-radius: 4px;\">\n    <strong>${u.name}</strong><br>\n    📍 ${u.city}, ${u.country}<br>\n    ✨ Match Score: ${u.score}/100 | Acceptance: ${u.acceptance_rate}%\n  </li>\n`;\n\nconst emailBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <style>\n    body { font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; color: #333; }\n    .container { max-width: 700px; margin: 0 auto; background: white; }\n    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }\n    .content { padding: 30px 20px; }\n    .section { margin-bottom: 30px; }\n    .message-box { background: #f9f9f9; border-left: 4px solid #667eea; padding: 15px; margin-bottom: 15px; line-height: 1.6; }\n    .footer { background: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #ddd; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>🎓 Your University Counselor Report</h1>\n      <p>Welcome, ${data.personalInfo.name}! Here's your personalized guidance.</p>\n    </div>\n    \n    <div class=\"content\">\n      <div class=\"section\">\n        <h2>📚 Counselor's Message</h2>\n        <div class=\"message-box\">\n          ${message.replace(/\\n/g, '<br>')}\n        </div>\n      </div>\n      \n      <div class=\"section\">\n        <h2>🎯 Your Matched Universities</h2>\n        \n        <h3>Safe Universities</h3>\n        <ul style=\"list-style: none; padding: 0;\">\n          ${matches.safe.map(formatUni).join('')}\n        </ul>\n        \n        <h3>Target Universities</h3>\n        <ul style=\"list-style: none; padding: 0;\">\n          ${matches.target.map(formatUni).join('')}\n        </ul>\n        \n        <h3>Dream Universities</h3>\n        <ul style=\"list-style: none; padding: 0;\">\n          ${matches.dream.map(formatUni).join('')}\n        </ul>\n      </div>\n      \n      <div class=\"section\">\n        <h2>📊 Your Profile</h2>\n        <p><strong>Academic Score:</strong> ${data.academics.academicScore} (${data.academics.gradingSystem})</p>\n        <p><strong>Study Level:</strong> ${data.preferences.studyLevel}</p>\n        <p><strong>Target Countries:</strong> ${data.preferences.targetCountries.join(', ')}</p>\n        <p><strong>Budget:</strong> $${data.preferences.budgetMin} - $${data.preferences.budgetMax}</p>\n      </div>\n    </div>\n    \n    <div class=\"footer\">\n      <p>Match Maker Path Student Counselor</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\nreturn { emailBody };"
+      },
+      "id": "format_email",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_EMAIL@gmail.com",
+        "toEmail": "={{ $json.studentData.personalInfo.email }}",
+        "subject": "Your Personalized University Counselor Report",
+        "emailFormat": "html",
+        "message": "={{ $json.emailBody }}"
+      },
+      "id": "send_email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [1850, 300],
+      "credentials": {
+        "gmailOAuth2": "gmail_credentials"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  timestamp: new Date().toISOString(),\n  studentEmail: $json.studentData.personalInfo.email,\n  status: 'success',\n  counselorMessageLength: $json.counselorMessage.length,\n  matchCount: $json.matchedUniversities.safe.length + $json.matchedUniversities.target.length + $json.matchedUniversities.dream.length,\n  message: 'Counselor email sent successfully'\n};"
+      },
+      "id": "log_success",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2050, 300]
+    }
+  ],
+  "connections": {
+    "webhook_trigger": {
+      "main": [
+        [
+          {
+            "node": "parse_student_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_student_data": {
+      "main": [
+        [
+          {
+            "node": "create_gemini_prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_gemini_prompt": {
+      "main": [
+        [
+          {
+            "node": "call_gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "call_gemini": {
+      "main": [
+        [
+          {
+            "node": "parse_gemini_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_gemini_response": {
+      "main": [
+        [
+          {
+            "node": "get_matched_unis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_matched_unis": {
+      "main": [
+        [
+          {
+            "node": "format_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format_email": {
+      "main": [
+        [
+          {
+            "node": "send_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_email": {
+      "main": [
+        [
+          {
+            "node": "log_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

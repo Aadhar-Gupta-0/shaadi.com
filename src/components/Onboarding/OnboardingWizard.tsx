@@ -10,6 +10,7 @@ import { OnboardingData } from "@/types";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { validateContact } from "@/lib/profileValidation";
 
 const initialData: OnboardingData = {
   personalInfo: { name: "", email: "", phone: "", linkedin: "", address: "" },
@@ -33,6 +34,11 @@ export const OnboardingWizard = () => {
       case 1:
         if (!data.personalInfo.name || !data.personalInfo.email || !data.personalInfo.phone || !data.personalInfo.address) {
           toast.error("Please fill in all required fields");
+          return false;
+        }
+        const contactIssue = validateContact(data.personalInfo.email, data.personalInfo.phone);
+        if (contactIssue) {
+          toast.error(contactIssue);
           return false;
         }
         break;
@@ -63,6 +69,12 @@ export const OnboardingWizard = () => {
   };
 
   const handleSubmit = async () => {
+    const issue = validateContact(data.personalInfo.email, data.personalInfo.phone);
+    if (issue) {
+      toast.error(issue);
+      setCurrentStep(1);
+      return;
+    }
     setIsSubmitting(true);
     
     try {

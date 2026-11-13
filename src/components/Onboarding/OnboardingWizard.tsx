@@ -149,8 +149,15 @@ export const OnboardingWizard = () => {
       // n8n webhook URL for counselor email workflow
       const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL as string | undefined;
       if (!n8nWebhookUrl) return;
-      
-      const response = await fetch(n8nWebhookUrl, {
+      // Student profile data may include personal contact and academic details.
+      // Never submit it to an insecure or credential-embedded endpoint.
+      const parsedWebhook = new URL(n8nWebhookUrl);
+      if (parsedWebhook.protocol !== 'https:' || parsedWebhook.username || parsedWebhook.password) {
+        console.warn('Counselor automation requires an HTTPS webhook without embedded credentials.');
+        return;
+      }
+
+      const response = await fetch(parsedWebhook.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,11 +171,10 @@ export const OnboardingWizard = () => {
       });
 
       if (!response.ok) {
-        console.warn('n8n workflow trigger failed:', response.statusText);
-        // Don't throw error - workflow failure shouldn't block user experience
+        console.warn('Counselor automation did not accept the request.');
+        return; // Never report delivery success after a failed request.
       }
-
-      console.log('n8n workflow triggered successfully');
+      console.info('Counselor automation accepted the request (delivery not confirmed).');
     } catch (error) {
       console.error('Error triggering n8n workflow:', error);
       // Don't throw error - workflow failure shouldn't block user experience
